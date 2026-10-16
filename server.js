@@ -83,4 +83,61 @@ app.post("/api/chat", async (req, res) => {
 });
 
 const port = Number(process.env.PORT || 3000);
+
+app.post("/api/live-token", async (req, res) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({
+        error: "GEMINI_API_KEY serverda sozlanmagan"
+      });
+    }
+
+    const now = Date.now();
+
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/auth_tokens",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey
+        },
+        body: JSON.stringify({
+          uses: 1,
+          expireTime: new Date(
+            now + 30 * 60 * 1000
+          ).toISOString(),
+          newSessionExpireTime: new Date(
+            now + 60 * 1000
+          ).toISOString(),
+          liveConnectConstraints: {
+            model: "models/gemini-3.8-live",
+            config: {
+              sessionResumption: {},
+              responseModalities: ["AUDIO"]
+            }
+          }
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("Gemini token xatosi:", data);
+      return res.status(response.status).json({
+        error: "Gemini token yaratilmadi"
+      });
+    }
+
+    return res.json({ token: data.name });
+  } catch (error) {
+    console.error("Live token xatosi:", error);
+    return res.status(500).json({
+      error: "Serverda xatolik yuz berdi"
+    });
+  }
+});
 app.listen(port, "0.0.0.0", () => console.log(`Russian Tutor Gemini backend listening on ${port}`));

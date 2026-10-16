@@ -33,7 +33,6 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Matnli suhbat
 app.post("/api/chat", async (req, res) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -45,41 +44,46 @@ app.post("/api/chat", async (req, res) => {
     }
 
     const {
-      message,
-      history = [],
+      messages,
       level = "A1"
     } = req.body || {};
 
-    if (typeof message !== "string" || !message.trim()) {
+    if (!Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({
-        error: "Xabar bo'sh bo'lmasligi kerak."
+        error: "Xabarlar ro'yxati bo'sh."
+      });
+    }
+
+    if (messages.length > 40) {
+      return res.status(400).json({
+        error: "Xabarlar soni 40 tadan oshmasligi kerak."
+      });
+    }
+
+    const contents = messages
+      .filter(item =>
+        item &&
+        typeof item.content === "string" &&
+        ["user", "assistant", "model"].includes(item.role)
+      )
+      .map(item => ({
+        role: item.role === "assistant" ? "model" : item.role,
+        parts: [{
+          text: item.content.slice(0, 5000)
+        }]
+      }));
+
+    if (
+      contents.length === 0 ||
+      contents[contents.length - 1].role !== "user"
+    ) {
+      return res.status(400).json({
+        error: "Oxirgi xabar user xabari bo'lishi kerak."
       });
     }
 
     const model =
       process.env.GEMINI_MODEL || "gemini-2.5-flash";
-
-    const contents = [];
-
-    if (Array.isArray(history)) {
-      for (const item of history) {
-        if (
-          item &&
-          typeof item.text === "string" &&
-          ["user", "model"].includes(item.role)
-        ) {
-          contents.push({
-            role: item.role,
-            parts: [{ text: item.text }]
-          });
-        }
-      }
-    }
-
-    contents.push({
-      role: "user",
-      parts: [{ text: message.trim() }]
-    });
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
@@ -91,12 +95,14 @@ app.post("/api/chat", async (req, res) => {
         },
         body: JSON.stringify({
           systemInstruction: {
-            parts: [{ text: systemPrompt(level) }]
+            parts: [{
+              text: systemPrompt(level)
+            }]
           },
           contents,
           generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 500
+            temperature: 0.6,
+            maxOutputTokens: 900
           }
         })
       }
@@ -112,22 +118,23 @@ app.post("/api/chat", async (req, res) => {
       );
 
       return res.status(response.status).json({
-        error: data?.error?.message || "Gemini chat xatosi."
+        error: data?.error?.message || "Gemini API xatosi."
       });
     }
 
-    const answer =
-      data?.candidates?.[0]?.content?.parts
-        ?.map((part) => part.text || "")
-        .join("") || "";
+    const reply = data?.candidates?.[0]?.content?.parts
+      ?.map(part => part.text || "")
+      .join("")
+      .trim();
 
-    if (!answer) {
+    if (!reply) {
       return res.status(502).json({
         error: "Gemini javob qaytarmadi."
       });
     }
 
-    return res.json({ reply: answer });
+    return res.json({ reply });
+
   } catch (error) {
     console.error("Chat server xatosi:", error);
 
@@ -137,78 +144,8 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-// Live API uchun vaqtinchalik token
-app.post("/api/live-token", async (req, res) => {
-  try {
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (!apiKey) {
-      return res.status(500).json({
-        error: "GEMINI_API_KEY Render muhitida sozlanmagan."
-      });
-    }
-
-    const now = Date.now();
-
-    const payload = {
-      uses: 1,
-      expireTime: new Date(
-        now + 30 * 60 * 1000
-      ).toISOString(),
-      newSessionExpireTime: new Date(
-        now + 60 * 1000
-      ).toISOString(),
-      liveConnectConstraints: {
-        model: "models/gemini-3.8-live",
-        config: {
-          responseModalities: ["AUDIO"],
-          sessionResumption: {}
-        }
-      }
-    };
-
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/auth_tokens",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey
-        },
-        body: JSON.stringify(payload)
-      }
-    );
-
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      console.error(
-        "Gemini token xatosi:",
-        response.status,
-        JSON.stringify(data)
-      );
-
-      return res.status(response.status).json({
-        error: data?.error?.message || "Token yaratilmadi."
-      });
-    }
-
-    if (!data?.name) {
-      return res.status(502).json({
-        error: "Google javobida token topilmadi."
-      });
-    }
-
-    return res.json({ token: data.name });
-  } catch (error) {
-    console.error("Live token server xatosi:", error);
-
-    return res.status(500).json({
-      error: "Live token yaratishda server xatosi."
-    });
-  }
-});
-
 app.listen(PORT, () => {
-  console.log(`Russian Tutor backend ${PORT}-portda ishga tushdi.`);
+  console.log(
+    `Russian Tutor backend ${PORT}-portda ishga tushdi.`
+  );
 });

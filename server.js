@@ -11,25 +11,21 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json({ limit: "100kb" }));
 
-// Russian Tutor o'qituvchi ko'rsatmasi
 const systemPrompt = (level = "A1") => `
 You are Russian Tutor, a patient Russian-language teacher
 for an Uzbek-speaking learner.
 
 The learner's Russian level is ${level}.
 
-Rules:
-- Respond primarily in simple Russian.
-- Explain important mistakes in Uzbek.
-- When correcting a sentence, include:
-  To'g'rilangan variant:
-- Briefly explain the correction in Uzbek.
-- Ask exactly one simple follow-up question in Russian.
-- Help translate Uzbek thoughts into natural Russian.
-- Be encouraging, concise, and accurate.
+Respond primarily in simple Russian.
+Explain important mistakes in Uzbek.
+When correcting a sentence, include:
+To'g'rilangan variant:
+Briefly explain the correction in Uzbek.
+Ask exactly one simple follow-up question in Russian.
+Be encouraging, concise, and accurate.
 `;
 
-// Serverni tekshirish
 app.get("/health", (req, res) => {
   res.json({
     ok: true,
@@ -37,7 +33,7 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Matnli AI suhbat
+// Matnli suhbat
 app.post("/api/chat", async (req, res) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -141,7 +137,7 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-// Gemini Live API: vaqtinchalik token
+// Live API uchun vaqtinchalik token
 app.post("/api/live-token", async (req, res) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -154,21 +150,18 @@ app.post("/api/live-token", async (req, res) => {
 
     const now = Date.now();
 
-    // REST API uchun AuthToken formati
     const payload = {
-      authToken: {
-        uses: 1,
-        expireTime: new Date(
-          now + 30 * 60 * 1000
-        ).toISOString(),
-        newSessionExpireTime: new Date(
-          now + 60 * 1000
-        ).toISOString(),
-        bidiGenerateContentSetup: {
-          model: "models/gemini-3.8-live",
-          generationConfig: {
-            responseModalities: ["AUDIO"]
-          },
+      uses: 1,
+      expireTime: new Date(
+        now + 30 * 60 * 1000
+      ).toISOString(),
+      newSessionExpireTime: new Date(
+        now + 60 * 1000
+      ).toISOString(),
+      liveConnectConstraints: {
+        model: "models/gemini-3.8-live",
+        config: {
+          responseModalities: ["AUDIO"],
           sessionResumption: {}
         }
       }
@@ -201,16 +194,12 @@ app.post("/api/live-token", async (req, res) => {
     }
 
     if (!data?.name) {
-      console.error("Gemini token javobida name yo'q.");
-
       return res.status(502).json({
         error: "Google javobida token topilmadi."
       });
     }
 
-    return res.json({
-      token: data.name
-    });
+    return res.json({ token: data.name });
   } catch (error) {
     console.error("Live token server xatosi:", error);
 
@@ -221,7 +210,5 @@ app.post("/api/live-token", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(
-    `Russian Tutor backend ${PORT}-portda ishga tushdi.`
-  );
+  console.log(`Russian Tutor backend ${PORT}-portda ishga tushdi.`);
 });

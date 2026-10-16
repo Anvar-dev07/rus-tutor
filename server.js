@@ -27,7 +27,7 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// Oddiy matnli AI suhbat
+// Matnli AI suhbat
 app.post("/api/chat", async (req, res) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -119,7 +119,7 @@ app.post("/api/chat", async (req, res) => {
       );
 
       return res.status(502).json({
-        error: "Gemini javobi bo‘sh keldi. Boshqa xabar yuborib ko‘ring."
+        error: "Gemini javobi bo‘sh keldi."
       });
     }
 
@@ -155,24 +155,18 @@ app.post("/api/live-token", async (_req, res) => {
           "x-goog-api-key": apiKey
         },
         body: JSON.stringify({
-          // MUHIM: sozlamalar config ichida joylashgan
-          config: {
-            uses: 1,
-
-            expireTime: new Date(
-              now + 30 * 60 * 1000
-            ).toISOString(),
-
-            newSessionExpireTime: new Date(
-              now + 60 * 1000
-            ).toISOString(),
-
-            liveConnectConstraints: {
-              model: "models/gemini-3.8-live",
-              config: {
-                sessionResumption: {},
-                responseModalities: ["AUDIO"]
-              }
+          uses: 1,
+          expireTime: new Date(
+            now + 30 * 60 * 1000
+          ).toISOString(),
+          newSessionExpireTime: new Date(
+            now + 60 * 1000
+          ).toISOString(),
+          liveConnectConstraints: {
+            model: "models/gemini-3.8-live",
+            config: {
+              sessionResumption: {},
+              responseModalities: ["AUDIO"]
             }
           }
         })
@@ -194,7 +188,7 @@ app.post("/api/live-token", async (_req, res) => {
     }
 
     if (!data?.name) {
-      console.error("Token javobida name mavjud emas.");
+      console.error("Gemini token javobida name yo‘q.");
 
       return res.status(502).json({
         error: "Gemini javobida token topilmadi."
@@ -206,7 +200,7 @@ app.post("/api/live-token", async (_req, res) => {
     console.error("Live token xatosi:", error?.message || error);
 
     return res.status(500).json({
-      error: "Serverda xatolik yuz berdi."
+      error: "Serverda kutilmagan xato yuz berdi."
     });
   }
 });

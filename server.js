@@ -83,7 +83,6 @@ app.post("/api/chat", async (req, res) => {
 });
 
 const port = Number(process.env.PORT || 3000);
-
 app.post("/api/live-token", async (req, res) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;

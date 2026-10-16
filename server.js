@@ -6,12 +6,12 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: "100kb" }));
 
-const PORT = process.env.PORT || 3000;
-
+// Russian Tutor uchun o'qituvchi ko'rsatmasi
 const systemPrompt = (level = "A1") => `
 You are Russian Tutor, a patient Russian-language teacher
 for an Uzbek-speaking learner.
@@ -30,6 +30,7 @@ Rules:
 - Never say an incorrect sentence is correct.
 `;
 
+// Server ishlayotganini tekshirish
 app.get("/health", (req, res) => {
   res.json({
     ok: true,
@@ -48,7 +49,11 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
-    const { message, history = [], level = "A1" } = req.body || {};
+    const {
+      message,
+      history = [],
+      level = "A1"
+    } = req.body || {};
 
     if (typeof message !== "string" || !message.trim()) {
       return res.status(400).json({
@@ -56,7 +61,8 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
-    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const model =
+      process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
     const contents = [];
 
@@ -104,10 +110,16 @@ app.post("/api/chat", async (req, res) => {
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      console.error("Gemini chat xatosi:", response.status, JSON.stringify(data));
+      console.error(
+        "Gemini chat xatosi:",
+        response.status,
+        JSON.stringify(data)
+      );
 
       return res.status(response.status).json({
-        error: data?.error?.message || "Gemini chat so'rovi bajarilmadi."
+        error:
+          data?.error?.message ||
+          "Gemini chat so'rovi bajarilmadi."
       });
     }
 
@@ -145,10 +157,17 @@ app.post("/api/live-token", async (req, res) => {
 
     const now = Date.now();
 
+    // Google rasmiy API tuzilishi:
+    // liveConnectConstraints authToken ichida emas,
+    // so'rovning yuqori darajasida bo'ladi.
     const payload = {
       uses: 1,
-      expireTime: new Date(now + 30 * 60 * 1000).toISOString(),
-      newSessionExpireTime: new Date(now + 60 * 1000).toISOString(),
+      expireTime: new Date(
+        now + 30 * 60 * 1000
+      ).toISOString(),
+      newSessionExpireTime: new Date(
+        now + 60 * 1000
+      ).toISOString(),
       liveConnectConstraints: {
         model: "models/gemini-3.8-live",
         config: {
@@ -180,18 +199,23 @@ app.post("/api/live-token", async (req, res) => {
       );
 
       return res.status(response.status).json({
-        error: data?.error?.message || "Gemini token yaratilmadi."
+        error:
+          data?.error?.message ||
+          "Gemini token yaratilmadi."
       });
     }
 
     if (!data?.name) {
-      console.error("Gemini token javobida name topilmadi.");
+      console.error(
+        "Gemini token javobida name topilmadi."
+      );
 
       return res.status(502).json({
         error: "Gemini javobida token topilmadi."
       });
     }
 
+    // Maxfiy tokenni faqat so'rov yuborgan ilovaga qaytaramiz.
     return res.json({
       token: data.name
     });
@@ -199,11 +223,14 @@ app.post("/api/live-token", async (req, res) => {
     console.error("Live token server xatosi:", error);
 
     return res.status(500).json({
-      error: "Live token yaratishda server xatosi yuz berdi."
+      error: "Live token yaratishda server xatosi."
     });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Russian Tutor backend ${PORT}-portda ishga tushdi.`);
+  console.log(
+    `Russian Tutor backend ${PORT}-portda ishga tushdi.`
+  );
 });
+

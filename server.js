@@ -160,22 +160,18 @@ app.post("/api/live-token", async (req, res) => {
     // Google rasmiy API tuzilishi:
     // liveConnectConstraints authToken ichida emas,
     // so'rovning yuqori darajasida bo'ladi.
-    const payload = {
-      uses: 1,
-      expireTime: new Date(
-        now + 30 * 60 * 1000
-      ).toISOString(),
-      newSessionExpireTime: new Date(
-        now + 60 * 1000
-      ).toISOString(),
-      liveConnectConstraints: {
-        model: "models/gemini-3.8-live",
-        config: {
-          responseModalities: ["AUDIO"],
-          sessionResumption: {}
-        }
-      }
-    };
+   const payload = {
+  uses: 1,
+  expireTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+  newSessionExpireTime: new Date(Date.now() + 60 * 1000).toISOString(),
+  liveConnectConstraints: {
+    model: "models/gemini-3.8-live",
+    config: {
+      sessionResumption: {},
+      responseModalities: ["AUDIO"]
+    }
+  }
+};
 
     const response = await fetch(
       "https://generativelanguage.googleapis.com/v1beta/auth_tokens",

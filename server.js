@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json({ limit: "100kb" }));
 
-// Russian Tutor uchun o'qituvchi ko'rsatmasi
+// Russian Tutor o'qituvchi ko'rsatmasi
 const systemPrompt = (level = "A1") => `
 You are Russian Tutor, a patient Russian-language teacher
 for an Uzbek-speaking learner.
@@ -19,18 +19,17 @@ for an Uzbek-speaking learner.
 The learner's Russian level is ${level}.
 
 Rules:
-- Respond primarily in simple Russian appropriate to the learner's level.
+- Respond primarily in simple Russian.
 - Explain important mistakes in Uzbek.
 - When correcting a sentence, include:
   To'g'rilangan variant:
-- Briefly explain why the correction is needed.
+- Briefly explain the correction in Uzbek.
 - Ask exactly one simple follow-up question in Russian.
-- Help translate Uzbek or English thoughts into natural Russian.
+- Help translate Uzbek thoughts into natural Russian.
 - Be encouraging, concise, and accurate.
-- Never say an incorrect sentence is correct.
 `;
 
-// Server ishlayotganini tekshirish
+// Serverni tekshirish
 app.get("/health", (req, res) => {
   res.json({
     ok: true,
@@ -38,14 +37,14 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Oddiy matnli AI suhbat
+// Matnli AI suhbat
 app.post("/api/chat", async (req, res) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       return res.status(500).json({
-        error: "Render muhitida GEMINI_API_KEY sozlanmagan."
+        error: "GEMINI_API_KEY Render muhitida sozlanmagan."
       });
     }
 
@@ -57,7 +56,7 @@ app.post("/api/chat", async (req, res) => {
 
     if (typeof message !== "string" || !message.trim()) {
       return res.status(400).json({
-        error: "message maydoni bo'sh bo'lmasligi kerak."
+        error: "Xabar bo'sh bo'lmasligi kerak."
       });
     }
 
@@ -117,9 +116,7 @@ app.post("/api/chat", async (req, res) => {
       );
 
       return res.status(response.status).json({
-        error:
-          data?.error?.message ||
-          "Gemini chat so'rovi bajarilmadi."
+        error: data?.error?.message || "Gemini chat xatosi."
       });
     }
 
@@ -144,34 +141,38 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-// Gemini Live API uchun vaqtinchalik token
+// Gemini Live API: vaqtinchalik token
 app.post("/api/live-token", async (req, res) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       return res.status(500).json({
-        error: "Render muhitida GEMINI_API_KEY sozlanmagan."
+        error: "GEMINI_API_KEY Render muhitida sozlanmagan."
       });
     }
 
     const now = Date.now();
 
-    // Google rasmiy API tuzilishi:
-    // liveConnectConstraints authToken ichida emas,
-    // so'rovning yuqori darajasida bo'ladi.
-   const payload = {
-  uses: 1,
-  expireTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-  newSessionExpireTime: new Date(Date.now() + 60 * 1000).toISOString(),
-  liveConnectConstraints: {
-    model: "models/gemini-3.8-live",
-    config: {
-      sessionResumption: {},
-      responseModalities: ["AUDIO"]
-    }
-  }
-};
+    // REST API uchun AuthToken formati
+    const payload = {
+      authToken: {
+        uses: 1,
+        expireTime: new Date(
+          now + 30 * 60 * 1000
+        ).toISOString(),
+        newSessionExpireTime: new Date(
+          now + 60 * 1000
+        ).toISOString(),
+        bidiGenerateContentSetup: {
+          model: "models/gemini-3.8-live",
+          generationConfig: {
+            responseModalities: ["AUDIO"]
+          },
+          sessionResumption: {}
+        }
+      }
+    };
 
     const response = await fetch(
       "https://generativelanguage.googleapis.com/v1beta/auth_tokens",
@@ -195,23 +196,18 @@ app.post("/api/live-token", async (req, res) => {
       );
 
       return res.status(response.status).json({
-        error:
-          data?.error?.message ||
-          "Gemini token yaratilmadi."
+        error: data?.error?.message || "Token yaratilmadi."
       });
     }
 
     if (!data?.name) {
-      console.error(
-        "Gemini token javobida name topilmadi."
-      );
+      console.error("Gemini token javobida name yo'q.");
 
       return res.status(502).json({
-        error: "Gemini javobida token topilmadi."
+        error: "Google javobida token topilmadi."
       });
     }
 
-    // Maxfiy tokenni faqat so'rov yuborgan ilovaga qaytaramiz.
     return res.json({
       token: data.name
     });
@@ -229,4 +225,3 @@ app.listen(PORT, () => {
     `Russian Tutor backend ${PORT}-portda ishga tushdi.`
   );
 });
-

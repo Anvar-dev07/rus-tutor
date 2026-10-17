@@ -26,6 +26,40 @@ Ask exactly one simple follow-up question in Russian.
 Be encouraging, concise, and accurate.
 `;
 
+function supabaseConfig() {
+  const url = process.env.SUPABASE_URL?.replace(/\/+$/, "");
+  const key = process.env.SUPABASE_SECRET_KEY;
+
+  if (!url || !key) {
+    throw new Error("Supabase muhit sozlamalari topilmadi.");
+  }
+
+  return { url, key };
+}
+
+async function supabaseRequest(path, options = {}) {
+  const { url, key } = supabaseConfig();
+
+  const response = await fetch(`${url}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      ...options.headers
+    }
+  });
+
+  const body = await response.text();
+
+  if (!response.ok) {
+    console.error("Supabase xatosi:", response.status, body);
+    throw new Error("Supabase so'rovini bajarib bo'lmadi.");
+  }
+
+  return body ? JSON.parse(body) : null;
+}
+
 app.get("/health", (req, res) => {
   res.json({
     ok: true,
@@ -33,6 +67,146 @@ app.get("/health", (req, res) => {
   });
 });
 
+// Mavzular ro'yxati
+app.get("/api/topics", async (req, res) => {
+  try {
+    const topics = await supabaseRequest(
+      "topics?select=id,title,category,description&order=category.asc,title.asc"
+    );
+
+    res.json({ topics });
+  } catch (error) {
+    console.error("Mavzularni olish xatosi:", error.message);
+    res.status(500).json({ error: "Mavzularni olib bo'lmadi." });
+  }
+});
+
+// Mavzular bo'yicha bilim natijalari
+app.get("/api/progress", async (req, res) => {
+  try {
+    const progress = await supabaseRequest(
+      "skill_progress?select=topic_id,attempts,correct_answers,accuracy,mastery,last_practiced,topics(title,category,description)&order=topic_id.asc"
+    );
+
+    res.json({ progress });
+  } catch (error) {
+    console.error("Natijalarni olish xatosi:", error.message);
+    res.status(500).json({ error: "Natijalarni olib bo'lmadi." });
+  }
+});
+
+// Bitta mashq natijasini saqlash va bilim darajasini yangilash
+app.post("/api/progress/attempt", async (req, res) => {
+  try {
+    const {
+      topicId,
+      question = "",
+      answer,
+      isCorrect,
+      errorType = null,
+      feedback = ""
+    } = req.body || {};
+
+    if (
+      typeof topicId !== "string" ||
+      !/^[a-z0-9_-]{1,80}$/i.test(topicId) ||
+      typeof answer !== "string" ||
+      typeof isCorrect !== "boolean"
+    ) {
+      return res.status(400).json({
+        error: "topicId, answer va isCorrect qiymatlarini tekshiring."
+      });
+    }
+
+    if (answer.length > 5000 || question.length > 5000 ||
+        typeof question !== "string" ||
+        typeof feedback !== "string" ||
+        feedback.length > 5000 ||
+        (errorType !== null && typeof errorType !== "string")) {
+      return res.status(400).json({
+        error: "Mashq ma'lumotlari noto'g'ri yoki juda uzun."
+      });
+    }
+
+    const topics = await supabaseRequest(
+      `topics?id=eq.${encodeURIComponent(topicId)}&select=id`
+    );
+
+    if (!topics?.length) {
+      return res.status(404).json({
+        error: "Bunday mavzu topilmadi. Avval mavzularni kiriting."
+      });
+    }
+
+    const previous = await supabaseRequest(
+      `skill_progress?topic_id=eq.${encodeURIComponent(topicId)}&select=attempts,correct_answers`
+    );
+
+    const oldAttempts = Number(previous?.[0]?.attempts || 0);
+    const oldCorrect = Number(previous?.[0]?.correct_answers || 0);
+
+    const attempts = oldAttempts + 1;
+    const correctAnswers = oldCorrect + (isCorrect ? 1 : 0);
+    const accuracy = Number(
+      ((correctAnswers / attempts) * 100).toFixed(2)
+    );
+
+    let mastery = "O'rganilmoqda";
+
+    if (attempts >= 3 && accuracy >= 85) {
+      mastery = "Mustahkam";
+    } else if (attempts >= 3 && accuracy >= 65) {
+      mastery = "Yaxshi";
+    } else if (attempts >= 3) {
+      mastery = "Qayta mashq kerak";
+    }
+
+    await supabaseRequest("practice_attempts", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        topic_id: topicId,
+        question: question.slice(0, 5000),
+        learner_answer: answer.slice(0, 5000),
+        is_correct: isCorrect,
+        error_type: errorType,
+        feedback: feedback.slice(0, 5000)
+      })
+    });
+
+    await supabaseRequest("skill_progress", {
+      method: "POST",
+      headers: {
+        Prefer: "resolution=merge-duplicates,return=minimal"
+      },
+      body: JSON.stringify({
+        topic_id: topicId,
+        attempts,
+        correct_answers: correctAnswers,
+        accuracy,
+        mastery,
+        last_practiced: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+    });
+
+    res.json({
+      ok: true,
+      topicId,
+      attempts,
+      correctAnswers,
+      accuracy,
+      mastery
+    });
+  } catch (error) {
+    console.error("Natijani saqlash xatosi:", error.message);
+    res.status(500).json({
+      error: "Mashq natijasini saqlab bo'lmadi."
+    });
+  }
+});
+
+// Mavjud Gemini matnli chat — saqlab qolindi
 app.post("/api/chat", async (req, res) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -43,10 +217,7 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
-    const {
-      messages,
-      level = "A1"
-    } = req.body || {};
+    const { messages, level = "A1" } = req.body || {};
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({
@@ -68,9 +239,7 @@ app.post("/api/chat", async (req, res) => {
       )
       .map(item => ({
         role: item.role === "assistant" ? "model" : item.role,
-        parts: [{
-          text: item.content.slice(0, 5000)
-        }]
+        parts: [{ text: item.content.slice(0, 5000) }]
       }));
 
     if (
@@ -82,8 +251,7 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
-    const model =
-      process.env.GEMINI_MODEL || "gemini-3.8-flash";
+    const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
@@ -95,9 +263,7 @@ app.post("/api/chat", async (req, res) => {
         },
         body: JSON.stringify({
           systemInstruction: {
-            parts: [{
-              text: systemPrompt(level)
-            }]
+            parts: [{ text: systemPrompt(level) }]
           },
           contents,
           generationConfig: {
@@ -134,7 +300,6 @@ app.post("/api/chat", async (req, res) => {
     }
 
     return res.json({ reply });
-
   } catch (error) {
     console.error("Chat server xatosi:", error);
 
@@ -145,7 +310,5 @@ app.post("/api/chat", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(
-    `Russian Tutor backend ${PORT}-portda ishga tushdi.`
-  );
+  console.log(`Russian Tutor backend ${PORT}-portda ishga tushdi.`);
 });
